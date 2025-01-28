@@ -1,13 +1,13 @@
-name: Deploy to EC2
+name: Deploy to EC2 with Docker
 
 on:
   push:
     branches:
-      - main  # La pipeline se déclenchera uniquement sur la branche main
+      - main
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest  # Utilisation d'une machine virtuelle Ubuntu pour le déploiement
+    runs-on: ubuntu-latest
 
     steps:
       # Checkout du code source
@@ -20,7 +20,7 @@ jobs:
 
       # Installer openssh-client
       - name: Install openssh-client
-        run: sudo apt-get install -y openssh-client
+        run: sudo apt-get install -y openssh-client docker.io
 
       # Ajouter la clé privée SSH encodée
       - name: Set up SSH key
@@ -29,28 +29,40 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}  # Clé privée SSH stockée dans les secrets GitHub
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # Ajouter l'IP de GitHub au fichier known_hosts pour éviter les avertissements de sécurité
+      # Ajouter GitHub à known_hosts pour éviter les avertissements de sécurité
       - name: Add GitHub to known_hosts
         run: ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-      # Déployer sur l'instance EC2 (connexion SSH et git pull)
-      - name: Deploy to EC2
+      # Déployer sur EC2 via Docker
+      - name: Deploy to EC2 with Docker
         run: |
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            # Aller dans le répertoire du projet
             cd ${{ secrets.WORK_DIR }}
+
+            # Puller le dernier code
             git pull origin main
-            npm install
-            npm run build
-            pm2 restart app || pm2 start npm --name "app" -- run start
+
+            # Arrêter et supprimer le conteneur Docker si déjà en cours
+            docker-compose down
+            docker system prune -f
+
+            # Construire l'application et démarrer le conteneur Docker
+            docker-compose up --build -d
+
+            # Vérifier si le conteneur fonctionne
+            docker ps
+
+            # Pour tester que l'application fonctionne
+            curl localhost:5000
           EOF
         env:
-          SSH_USER: ${{ secrets.SSH_USER }}    # Utilisateur SSH (par exemple, ubuntu)
-          SSH_HOST: ${{ secrets.SSH_HOST }}    # IP publique de ton instance EC2
-          WORK_DIR: ${{ secrets.WORK_DIR }}    # Répertoire où ton projet est cloné
-          MAIN_BRANCH: main                   # La branche principale du projet
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          WORK_DIR: ${{ secrets.WORK_DIR }}
 
-      # Nettoyage du répertoire .ssh (sécurisation)
+      # Nettoyage du répertoire .ssh pour la sécurité
       - name: Clean up SSH
         run: rm -rf ~/.ssh
