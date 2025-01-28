@@ -35,6 +35,17 @@ jobs:
       - name: Add GitHub to known_hosts
         run: ssh-keyscan github.com >> ~/.ssh/known_hosts
 
+      # Se connecter à EC2 et supprimer containerd et docker.io
+      - name: Remove containerd and docker.io
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            sudo apt-get remove --purge -y containerd.io docker.io docker-ce docker-ce-cli
+            sudo apt-get autoremove -y
+          EOF
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+
       # Déployer sur EC2 via Docker
       - name: Deploy to EC2 with Docker
         run: |
