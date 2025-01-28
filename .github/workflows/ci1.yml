@@ -1,12 +1,12 @@
-name: Build and Deploy to GitHub Pages
+name: Deploy to EC2
 
 on:
   push:
     branches:
-      - main
+      - main  # La pipeline s'exécute uniquement sur les pushes vers main
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,6 +24,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # Run tests (si tu en as)
       - name: Run tests
         run: npm test
 
@@ -31,9 +32,23 @@ jobs:
       - name: Build the project
         run: npm run build
 
-      # Deploy to GitHub Pages
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}  # Utilisation du token GitHub pour déployer
-          publish_dir: ./build  # Dossier où se trouve l'application construite
+      # Set up SSH
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      # Deploy to EC2 (SSH & Git Pull)
+      - name: Deploy to EC2
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.SSH_HOST }} "cd ${{ secrets.WORK_DIR }} && git pull origin main && npm install && pm2 restart all"  # Remplacer la commande pm2 selon ton besoin
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}  # Clé privée pour SSH
+          SSH_HOST: ${{ secrets.SSH_HOST }}  # IP de ton instance EC2
+          WORK_DIR: ${{ secrets.WORK_DIR }}  # Répertoire de ton projet sur le serveur
+          
+      # Clean up SSH key (optionnel)
+      - name: Remove SSH key
+        run: rm -rf ~/.ssh
