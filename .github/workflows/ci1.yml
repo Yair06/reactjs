@@ -3,52 +3,54 @@ name: Deploy to EC2
 on:
   push:
     branches:
-      - main  # La pipeline s'exécute uniquement sur les pushes vers main
+      - main  # La pipeline se déclenchera uniquement sur la branche main
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Utilisation d'une machine virtuelle Ubuntu pour le déploiement
 
     steps:
-      # Checkout the code
+      # Checkout du code source
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Set up Node.js (choisir la version appropriée)
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'  # Choisir la version Node.js souhaitée
+      # Mettre à jour les paquets
+      - name: Update packages
+        run: sudo apt-get update -y && sudo apt-get upgrade -y
 
-      # Install dependencies
-      - name: Install dependencies
-        run: npm install
+      # Installer openssh-client
+      - name: Install openssh-client
+        run: sudo apt-get install -y openssh-client
 
-      # Run tests (si tu en as)
-      - name: Run tests
-        run: npm test
-
-      # Build the project
-      - name: Build the project
-        run: npm run build
-
-      # Set up SSH
-      - name: Set up SSH
+      # Ajouter la clé privée SSH encodée
+      - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}  # Clé privée SSH stockée dans les secrets GitHub
 
-      # Deploy to EC2 (SSH & Git Pull)
+      # Ajouter l'IP de GitHub au fichier known_hosts pour éviter les avertissements de sécurité
+      - name: Add GitHub to known_hosts
+        run: ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      # Déployer sur l'instance EC2 (connexion SSH et git pull)
       - name: Deploy to EC2
         run: |
-          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.SSH_HOST }} "cd ${{ secrets.WORK_DIR }} && git pull origin main && npm install && pm2 restart all"  # Remplacer la commande pm2 selon ton besoin
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            cd ${{ secrets.WORK_DIR }}
+            git pull origin main
+            npm install
+            npm run build
+            pm2 restart app || pm2 start npm --name "app" -- run start
+          EOF
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}  # Clé privée pour SSH
-          SSH_HOST: ${{ secrets.SSH_HOST }}  # IP de ton instance EC2
-          WORK_DIR: ${{ secrets.WORK_DIR }}  # Répertoire de ton projet sur le serveur
-          
-      # Clean up SSH key (optionnel)
-      - name: Remove SSH key
+          SSH_USER: ${{ secrets.SSH_USER }}    # Utilisateur SSH (par exemple, ubuntu)
+          SSH_HOST: ${{ secrets.SSH_HOST }}    # IP publique de ton instance EC2
+          WORK_DIR: ${{ secrets.WORK_DIR }}    # Répertoire où ton projet est cloné
+          MAIN_BRANCH: main                   # La branche principale du projet
+
+      # Nettoyage du répertoire .ssh (sécurisation)
+      - name: Clean up SSH
         run: rm -rf ~/.ssh
