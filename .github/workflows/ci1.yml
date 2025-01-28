@@ -1,4 +1,4 @@
-name: Build and Deploy to GitHub Pages
+name: Deploy to EC2 with Docker
 
 on:
   push:
@@ -6,34 +6,63 @@ on:
       - main
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the code
+      # Checkout du code source
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Set up Node.js (choisir la version appropriée)
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'  # Choisir la version Node.js souhaitée
+      # Mettre à jour les paquets
+      - name: Update packages
+        run: sudo apt-get update -y && sudo apt-get upgrade -y
 
-      # Install dependencies
-      - name: Install dependencies
-        run: npm install
+      # Installer openssh-client
+      - name: Install openssh-client
+        run: sudo apt-get install -y openssh-client docker.io
 
-      - name: Run tests
-        run: npm test
+      # Ajouter la clé privée SSH encodée
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # Build the project
-      - name: Build the project
-        run: npm run build
+      # Ajouter GitHub à known_hosts pour éviter les avertissements de sécurité
+      - name: Add GitHub to known_hosts
+        run: ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-      # Deploy to GitHub Pages
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}  # Utilisation du token GitHub pour déployer
-          publish_dir: ./build  # Dossier où se trouve l'application construite
+      # Déployer sur EC2 via Docker
+      - name: Deploy to EC2 with Docker
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            # Aller dans le répertoire du projet
+            cd ${{ secrets.WORK_DIR }}
+
+            # Puller le dernier code
+            git pull origin main
+
+            # Arrêter et supprimer le conteneur Docker si déjà en cours
+            docker-compose down
+            docker system prune -f
+
+            # Construire l'application et démarrer le conteneur Docker
+            docker-compose up --build -d
+
+            # Vérifier si le conteneur fonctionne
+            docker ps
+
+            # Pour tester que l'application fonctionne
+            curl localhost:5000
+          EOF
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          WORK_DIR: ${{ secrets.WORK_DIR }}
+
+      # Nettoyage du répertoire .ssh pour la sécurité
+      - name: Clean up SSH
+        run: rm -rf ~/.ssh
