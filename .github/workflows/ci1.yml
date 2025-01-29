@@ -21,15 +21,31 @@ jobs:
       # Installer Docker et Docker Compose
       - name: Install Docker and Docker Compose
         run: |
-          # Installer Docker
-          sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-          curl -fsSL https://get.docker.com -o get-docker.sh
-          sudo sh get-docker.sh
-          sudo usermod -aG docker $USER
+          # Vérifier si Docker est déjà installé
+          if ! command -v docker &> /dev/null; then
+            echo "Docker not found, installing..."
+            # Installer Docker
+            sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            sudo sh get-docker.sh
+            sudo usermod -aG docker $USER
+          else
+            echo "Docker is already installed."
+          fi
 
-          # Installer Docker Compose
-          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
+          # Vérifier si Docker Compose est déjà installé
+          if ! command -v docker-compose &> /dev/null; then
+            echo "Docker Compose not found, installing..."
+            # Installer Docker Compose
+            sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+          else
+            echo "Docker Compose is already installed."
+          fi
+
+          # Redémarrer Docker pour s'assurer qu'il fonctionne
+          sudo systemctl restart docker
+          sudo systemctl status docker --no-pager
 
       # Ajouter la clé privée SSH encodée pour permettre l'accès à EC2
       - name: Set up SSH key
