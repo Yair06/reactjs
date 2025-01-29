@@ -3,7 +3,7 @@ name: Deploy to EC2 with Docker
 on:
   push:
     branches:
-      - dev  # Déclenche le workflow uniquement sur les commits de la branche 'main'
+      - dev  # Déclenche le workflow uniquement sur les commits de la branche 'dev'
 
 jobs:
   deploy:
@@ -17,6 +17,19 @@ jobs:
       # Mettre à jour les paquets
       - name: Update packages
         run: sudo apt-get update -y && sudo apt-get upgrade -y
+
+      # Installer Docker et Docker Compose
+      - name: Install Docker and Docker Compose
+        run: |
+          # Installer Docker
+          sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+          curl -fsSL https://get.docker.com -o get-docker.sh
+          sudo sh get-docker.sh
+          sudo usermod -aG docker $USER
+
+          # Installer Docker Compose
+          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
 
       # Ajouter la clé privée SSH encodée pour permettre l'accès à EC2
       - name: Set up SSH key
@@ -35,6 +48,10 @@ jobs:
       - name: Deploy to EC2 with Docker
         run: |
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            # Vérifier si Docker et Docker Compose sont installés
+            docker --version
+            docker-compose --version
+
             # Aller dans le répertoire du projet
             cd ${{ secrets.WORK_DIR }}
 
