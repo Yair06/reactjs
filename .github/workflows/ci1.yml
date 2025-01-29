@@ -3,7 +3,7 @@ name: Deploy to EC2 with Docker
 on:
   push:
     branches:
-      - main  # Déclenche le workflow uniquement sur les commits de la branche 'main'
+      - dev  # Déclenche le workflow uniquement sur les commits de la branche 'main'
 
 jobs:
   deploy:
