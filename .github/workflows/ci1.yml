@@ -3,7 +3,7 @@ name: Deploy to EC2 with Docker
 on:
   push:
     branches:
-      - dev  # Déclenche le workflow uniquement sur les commits de la branche 'dev'
+      - main  # Déclenche le workflow uniquement sur les commits de la branche 'main'
 
 jobs:
   deploy:
@@ -21,7 +21,7 @@ jobs:
           sudo apt-get install -y nodejs npm
           npm install
 
-      # Lancer les tests ReactJS
+      # Lancer les tests ReactJS (si vous voulez tester avant de déployer)
       - name: Run ReactJS tests
         run: |
           npm test -- --maxWorkers=2 --coverage --ci --silent
