@@ -3,77 +3,43 @@ name: Deploy to EC2 with Docker
 on:
   push:
     branches:
-      - main
+      - main  # Déclenche le workflow uniquement sur les commits de la branche 'main'
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: ubuntu-latest  # Utilisation de l'image Ubuntu pour exécuter les étapes
 
     steps:
-      # Checkout du code source
+      # Checkout du code source depuis le repository
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Mettre à jour les paquets
-      - name: Update packages
-        run: sudo apt-get update -y && sudo apt-get upgrade -y
-
-      # Installer openssh-client
-      - name: Install openssh-client
-        run: sudo apt-get install -y openssh-client docker.io
-
-      # Ajouter la clé privée SSH encodée
-      - name: Set up SSH key
+      # Mettre à jour les paquets et installer les dépendances nécessaires
+      - name: Update packages and install dependencies
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          sudo apt-get update -y
+          sudo apt-get install -y nodejs npm
+          npm install
 
-      # Ajouter GitHub à known_hosts pour éviter les avertissements de sécurité
-      - name: Add GitHub to known_hosts
-        run: ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-      # Se connecter à EC2 et supprimer containerd et docker.io
-      - name: Remove containerd and docker.io
+      # Lancer les tests ReactJS
+      - name: Run ReactJS tests
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            sudo apt-get remove --purge -y containerd.io docker.io docker-ce docker-ce-cli
-            sudo apt-get autoremove -y
-          EOF
-        env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
+          npm test -- --maxWorkers=2 --coverage --ci --silent
+        continue-on-error: false  # La pipeline s'arrête si les tests échouent
 
-      # Déployer sur EC2 via Docker
-      - name: Deploy to EC2 with Docker
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            # Aller dans le répertoire du projet
-            cd ${{ secrets.WORK_DIR }}
+  deploy:
+    needs: test  # Le job deploy dépend du job test (si les tests passent)
+    runs-on: ubuntu-latest  # Utilisation de l'image Ubuntu pour exécuter les étapes
 
-            # Puller le dernier code
-            git pull origin main
+    steps:
+      # Checkout du code source depuis le repository
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-            # Arrêter et supprimer le conteneur Docker si déjà en cours
-            docker-compose down
-            docker system prune -f
-
-            # Construire l'application et démarrer le conteneur Docker
-            docker-compose up --build -d
-
-            # Vérifier si le conteneur fonctionne
-            docker ps
-
-            # Pour tester que l'application fonctionne
-            curl localhost:5000
-          EOF
-        env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          WORK_DIR: ${{ secrets.WORK_DIR }}
-
-      # Nettoyage du répertoire .ssh pour la sécurité
-      - name: Clean up SSH
-        run: rm -rf ~/.ssh
+      # Ajouter le fichier SSH pour permettre l'accès à EC2 (via un autre fichier SSH)
+      - name: Trigger SSH Deployment
+        uses: peter-evans/trigger-workflow-action@v1
+        with:
+          repository: ${{ github.repository }}
+          workflow: ssh.yml  # Fichier SSH à exécuter
+          ref: main

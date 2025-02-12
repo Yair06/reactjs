@@ -1,0 +1,52 @@
+name: Deploy via SSH to EC2
+
+on:
+  workflow_dispatch:  # Permet de déclencher ce workflow via un autre workflow
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest  # Utilisation de l'image Ubuntu pour exécuter les étapes
+
+    steps:
+      # Ajouter la clé privée SSH encodée pour permettre l'accès à EC2
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # Ajouter GitHub à known_hosts pour éviter les avertissements de sécurité lors de la connexion SSH
+      - name: Add GitHub to known_hosts
+        run: ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      # Déployer sur EC2 via SSH
+      - name: Deploy to EC2 with Docker
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+
+            # Aller dans le répertoire du projet
+            cd ${{ secrets.WORK_DIR }}
+
+            # Puller le dernier code
+            git pull origin main
+
+            # Arrêter et supprimer le conteneur Docker si déjà en cours
+            docker-compose down
+            docker system prune -f
+
+            # Construire l'application et démarrer le conteneur Docker
+            docker-compose up --build -d
+
+            # Vérifier si le conteneur fonctionne
+            docker ps
+          EOF
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          WORK_DIR: ${{ secrets.WORK_DIR }}
+
+      # Nettoyage du répertoire .ssh pour la sécurité
+      - name: Clean up SSH
+        run: rm -rf ~/.ssh
