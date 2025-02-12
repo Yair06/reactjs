@@ -6,7 +6,7 @@ on:
       - main  # Déclenche le workflow uniquement sur les commits de la branche 'main'
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest  # Utilisation de l'image Ubuntu pour exécuter les étapes
 
     steps:
@@ -14,49 +14,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Mettre à jour les paquets
-      - name: Update packages
-        run: sudo apt-get update -y && sudo apt-get upgrade -y
-
-      # Ajouter la clé privée SSH encodée pour permettre l'accès à EC2
-      - name: Set up SSH key
+      # Mettre à jour les paquets et installer les dépendances nécessaires
+      - name: Update packages and install dependencies
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          sudo apt-get update -y
+          sudo apt-get install -y nodejs npm
+          npm install
 
-      # Ajouter GitHub à known_hosts pour éviter les avertissements de sécurité lors de la connexion SSH
-      - name: Add GitHub to known_hosts
-        run: ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-      # Déployer sur EC2 via SSH
-      - name: Deploy to EC2 with Docker
+      # Lancer les tests ReactJS
+      - name: Run ReactJS tests
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          npm test -- --maxWorkers=2 --coverage --ci --silent
+        continue-on-error: false  # La pipeline s'arrête si les tests échouent
 
-            # Aller dans le répertoire du projet
-            cd ${{ secrets.WORK_DIR }}
+  deploy:
+    needs: test  # Le job deploy dépend du job test (si les tests passent)
+    runs-on: ubuntu-latest  # Utilisation de l'image Ubuntu pour exécuter les étapes
 
-            # Puller le dernier code
-            git pull origin main
+    steps:
+      # Checkout du code source depuis le repository
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-            # Arrêter et supprimer le conteneur Docker si déjà en cours
-            docker-compose down
-            docker system prune -f
-
-            # Construire l'application et démarrer le conteneur Docker
-            docker-compose up --build -d
-
-            # Vérifier si le conteneur fonctionne
-            docker ps
-          EOF
-        env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          WORK_DIR: ${{ secrets.WORK_DIR }}
-
-      # Nettoyage du répertoire .ssh pour la sécurité
-      - name: Clean up SSH
-        run: rm -rf ~/.ssh
+      # Ajouter le fichier SSH pour permettre l'accès à EC2 (via un autre fichier SSH)
+      - name: Trigger SSH Deployment
+        uses: peter-evans/trigger-workflow-action@v1
+        with:
+          repository: ${{ github.repository }}
+          workflow: ssh.yml  # Fichier SSH à exécuter
+          ref: main
