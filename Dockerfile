@@ -20,4 +20,4 @@ RUN npm run build
 EXPOSE 5000
 
 # Commande pour démarrer l'application
-CMD ["npm", "start"]
+CMD ["npx", "serve", "-s", "build", "-l", "5000"]
