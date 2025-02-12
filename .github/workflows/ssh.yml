@@ -1,10 +1,9 @@
 name: Deploy via SSH to EC2
 
 on:
-  workflow_run:
-    workflows: ["Deploy to EC2 with Docker"]  # Le nom exact du workflow à suivre
-    types:
-      - completed  # Déclencher lorsqu'il est terminé
+  push:
+    branches:
+      - main
 
 jobs:
   deploy:
