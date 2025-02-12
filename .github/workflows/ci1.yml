@@ -3,10 +3,10 @@ name: Deploy to EC2 with Docker
 on:
   push:
     branches:
-      - dev  # Déclenche le workflow uniquement sur les commits de la branche 'dev'
+      - main  # Déclenche le workflow uniquement sur les commits de la branche 'main'
 
 jobs:
-  test:
+  deploy:
     runs-on: ubuntu-latest  # Utilisation de l'image Ubuntu pour exécuter les étapes
 
     steps:
@@ -21,8 +21,33 @@ jobs:
           sudo apt-get install -y nodejs npm
           npm install
 
-      # Lancer les tests ReactJS
+      # Lancer les tests ReactJS (si vous voulez tester avant de déployer)
       - name: Run ReactJS tests
         run: |
           npm test -- --maxWorkers=2 --coverage --ci --silent
         continue-on-error: false  # La pipeline s'arrête si les tests échouent
+
+      # Pull le projet dans le répertoire
+      - name: Pull latest project
+        run: |
+          git pull origin main
+
+      # Arrêter et supprimer le conteneur Docker si déjà en cours
+      - name: Stop and remove Docker container
+        run: |
+          docker-compose down
+          docker system prune -f
+
+      # Construire l'application ReactJS et démarrer le conteneur Docker
+      - name: Build ReactJS app and start container
+        run: |
+          docker-compose up --build -d
+
+      # Vérifier si le conteneur fonctionne
+      - name: Check Docker container status
+        run: |
+          docker ps
+
+      # Nettoyage du répertoire .ssh pour la sécurité (si vous avez utilisé une clé SSH)
+      - name: Clean up SSH
+        run: rm -rf ~/.ssh
