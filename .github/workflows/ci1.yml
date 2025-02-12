@@ -21,7 +21,15 @@ jobs:
           sudo apt-get install -y nodejs npm
           npm install
 
-      # Lancer les tests ReactJS (si vous voulez tester avant de déployer)
+      # Installer Docker et Docker Compose
+      - name: Install Docker and Docker Compose
+        run: |
+          sudo apt-get install -y docker.io
+          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose --version  # Vérifier que Docker Compose est bien installé
+
+      # Lancer les tests ReactJS
       - name: Run ReactJS tests
         run: |
           npm test -- --maxWorkers=2 --coverage --ci --silent
