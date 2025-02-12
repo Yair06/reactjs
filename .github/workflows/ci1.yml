@@ -26,20 +26,3 @@ jobs:
         run: |
           npm test -- --maxWorkers=2 --coverage --ci --silent
         continue-on-error: false  # La pipeline s'arrête si les tests échouent
-
-  deploy:
-    needs: test  # Le job deploy dépend du job test (si les tests passent)
-    runs-on: ubuntu-latest  # Utilisation de l'image Ubuntu pour exécuter les étapes
-
-    steps:
-      # Checkout du code source depuis le repository
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      # Ajouter le fichier SSH pour permettre l'accès à EC2 (via un autre fichier SSH)
-      - name: Trigger SSH Deployment
-        uses: peter-evans/trigger-workflow-action@v1
-        with:
-          repository: ${{ github.repository }}
-          workflow: ssh.yml  # Fichier SSH à exécuter
-          ref: main
